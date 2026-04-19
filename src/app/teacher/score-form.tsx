@@ -58,10 +58,6 @@ export default function TeacherScoreForm({ gameName }: { gameName: string }) {
     router.refresh();
   }
 
-  const sidPreview =
-    /^[1-9]\d{4}$/.test(sid) &&
-    `${sid[0]}학년 ${Number(sid.slice(1, 3))}반 ${Number(sid.slice(3, 5))}번`;
-
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col bg-white px-5 pb-10 text-zinc-900 dark:bg-black dark:text-zinc-100">
       <header className="sticky top-0 z-10 -mx-5 flex items-center justify-between border-b border-zinc-200 bg-white/90 px-5 py-3 backdrop-blur dark:border-zinc-800 dark:bg-black/90">
@@ -88,24 +84,44 @@ export default function TeacherScoreForm({ gameName }: { gameName: string }) {
       <form onSubmit={submit} className="mt-6 space-y-5">
         <label className="block">
           <span className="text-sm font-medium text-zinc-600 dark:text-zinc-400">
-            개인식별번호 (5자리)
+            학생번호 (5자리)
           </span>
-          <input
-            ref={sidRef}
-            type="text"
-            inputMode="numeric"
-            pattern="[0-9]*"
-            maxLength={5}
-            autoFocus
-            autoComplete="off"
-            placeholder="G C C N N"
-            value={sid}
-            onChange={(e) => setSid(e.target.value.replace(/\D/g, "").slice(0, 5))}
-            className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-4 text-center font-mono text-3xl tracking-[0.5em] outline-none focus:border-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:focus:border-zinc-100"
-          />
-          <span className="mt-1 block h-5 text-sm text-zinc-500">
-            {sidPreview || "\u00a0"}
-          </span>
+          <div className="relative mt-1">
+            <input
+              ref={sidRef}
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              maxLength={5}
+              autoFocus
+              autoComplete="off"
+              value={sid}
+              onChange={(e) => setSid(e.target.value.replace(/\D/g, "").slice(0, 5))}
+              className="w-full rounded-md border border-zinc-300 bg-white px-3 py-4 text-center font-mono text-3xl tracking-[0.5em] text-transparent caret-transparent outline-none placeholder:text-transparent focus:border-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:focus:border-zinc-100"
+            />
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-3 font-mono text-3xl text-zinc-900 dark:text-zinc-100">
+              {sid.length === 0 ? (
+                <span className="tracking-[0.5em] text-zinc-400">G C C N N</span>
+              ) : (
+                <span className="flex items-baseline">
+                  <span className="tabular-nums">{sid[0]}</span>
+                  <span className="ml-1 mr-2 text-xl text-zinc-500">학년</span>
+                  {sid.length >= 2 && (
+                    <>
+                      <span className="tabular-nums">{sid.slice(1, 3)}</span>
+                      <span className="ml-1 mr-2 text-xl text-zinc-500">반</span>
+                    </>
+                  )}
+                  {sid.length >= 4 && (
+                    <>
+                      <span className="tabular-nums">{sid.slice(3, 5)}</span>
+                      <span className="ml-1 text-xl text-zinc-500">번</span>
+                    </>
+                  )}
+                </span>
+              )}
+            </div>
+          </div>
         </label>
 
         <label className="block">
