@@ -58,11 +58,26 @@ function Header({ data }: { data: LeaderboardPayload | null }) {
 
   return (
     <header className="sticky top-0 z-10 border-b border-zinc-200 bg-white/90 px-4 py-3 backdrop-blur dark:border-zinc-800 dark:bg-black/90">
-      <div className="flex items-baseline justify-between gap-3">
-        <h1 className="truncate text-lg font-semibold">
-          {data?.event?.name ?? "진행 중인 행사 없음"}
-        </h1>
-        <span className="shrink-0 text-xs text-zinc-500">{updatedLabel && `갱신 ${updatedLabel}`}</span>
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-[10px] font-medium uppercase tracking-wider text-zinc-400">
+            학생 모드
+          </div>
+          <h1 className="truncate text-lg font-semibold">
+            {data?.event?.name ?? "진행 중인 행사 없음"}
+          </h1>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          {updatedLabel && (
+            <span className="text-xs text-zinc-500">갱신 {updatedLabel}</span>
+          )}
+          <a
+            href="/login"
+            className="rounded-md border border-zinc-300 px-2.5 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900"
+          >
+            로그인
+          </a>
+        </div>
       </div>
     </header>
   );
