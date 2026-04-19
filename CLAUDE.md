@@ -60,7 +60,7 @@ This is a UX requirement from the PRD, not a nice-to-have — teachers enter sco
 
 - `DATABASE_URL` — Supabase Transaction-pooler connection string (port **6543**, not 5432).
 - `SESSION_SECRET` — used to sign session cookies; must be set in every environment.
-- `TZ=Asia/Seoul` — **required**: admin password derivation depends on local date. See [.env.example](.env.example).
+- **Do not set `TZ`** — Vercel reserves it (runtime forced to UTC). Admin password derivation uses `Intl.DateTimeFormat` with `timeZone: "Asia/Seoul"` hard-coded in [src/lib/auth.ts](src/lib/auth.ts), so the process TZ is irrelevant.
 
 ## Deploy
 
