@@ -382,7 +382,7 @@ function BigScreenView({
                 : "bg-zinc-800 text-zinc-500"
             }`}
           >
-            반별 순위
+            반 순위
           </span>
           <span
             className={`rounded-full px-4 py-1 text-lg font-semibold ${
@@ -439,7 +439,7 @@ function BigClassColumns({ rows }: { rows: ClassRanking[] }) {
                   {r.rank}
                 </span>
                 <span className="text-xl">
-                  {r.grade}-{r.classNo}
+                  {r.grade}학년 {String(r.classNo).padStart(2, "0")}반
                 </span>
               </span>
               <span className="tabular-nums text-2xl font-bold">
@@ -497,7 +497,7 @@ function BigSidInput() {
 
   async function lookup(value: string) {
     if (!/^[1-9]\d{4}$/.test(value)) {
-      setError("5자리 숫자를 입력하세요.");
+      setError("해당 번호를 찾을 수 없습니다.");
       setDetail(null);
       return;
     }
@@ -525,7 +525,7 @@ function BigSidInput() {
       className="flex h-full items-center gap-4 px-6"
     >
       <label className="shrink-0 text-lg font-semibold text-zinc-300">
-        개인식별번호
+        개인순위확인
       </label>
       <input
         type="text"
