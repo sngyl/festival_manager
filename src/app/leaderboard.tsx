@@ -503,16 +503,17 @@ function BigSidInput() {
     }
     try {
       const res = await fetch(`/api/student/${value}`, { cache: "no-store" });
-      const json = await res.json();
       if (!res.ok) {
         setDetail(null);
-        setError(json.error ?? "조회 실패");
+        setError("해당 번호를 찾을 수 없습니다.");
         return;
       }
+      const json = await res.json();
       setDetail(json as StudentDetail);
       setError(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "네트워크 오류");
+    } catch {
+      setDetail(null);
+      setError("해당 번호를 찾을 수 없습니다.");
     }
   }
 

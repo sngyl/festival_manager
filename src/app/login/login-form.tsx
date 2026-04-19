@@ -48,7 +48,7 @@ export default function LoginForm() {
 
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col bg-white px-5 py-8 text-zinc-900 dark:bg-black dark:text-zinc-100">
-      <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between gap-3">
         <h1 className="text-2xl font-bold">로그인</h1>
         <a
           href="/"
