@@ -9,6 +9,10 @@ import type {
   StudentGameScore,
 } from "./types";
 
+// Big-screen scoreboard shows fixed 40 positions; phone may show more if
+// the admin raised the limit, so fetch at least this many personal rows.
+const SCOREBOARD_ROW_FLOOR = 40;
+
 export async function getActiveEvent(): Promise<ActiveEvent | null> {
   const sql = getSql();
   const rows = (await sql`
@@ -17,17 +21,27 @@ export async function getActiveEvent(): Promise<ActiveEvent | null> {
   return rows[0] ?? null;
 }
 
+// Ranking rules:
+//   - dense_rank by total descending (ties share a rank; next rank is +1 not +N)
+//   - within a tied group, order by most-recent score first (last_scored desc)
 export async function getClassRankings(eventId: string): Promise<ClassRanking[]> {
   const sql = getSql();
   const rows = (await sql`
-    select s.grade, s.class_no as "classNo", coalesce(sum(sc.points), 0)::int as "totalPoints"
-    from students s
-    left join scores sc on sc.sid = s.sid and sc.event_id = ${eventId}
-    group by s.grade, s.class_no
-    having coalesce(sum(sc.points), 0) > 0
-    order by "totalPoints" desc, s.grade asc, s.class_no asc
-  `) as Array<{ grade: number; classNo: number; totalPoints: number }>;
-  return rows.map((r, i) => ({ rank: i + 1, ...r }));
+    with class_totals as (
+      select s.grade, s.class_no,
+        coalesce(sum(sc.points), 0)::int as total,
+        max(sc.updated_at) as last_scored
+      from students s
+      left join scores sc on sc.sid = s.sid and sc.event_id = ${eventId}
+      group by s.grade, s.class_no
+      having coalesce(sum(sc.points), 0) > 0
+    )
+    select grade, class_no as "classNo", total as "totalPoints",
+      (dense_rank() over (order by total desc))::int as rank
+    from class_totals
+    order by total desc, last_scored desc nulls last, grade asc, class_no asc
+  `) as Array<{ grade: number; classNo: number; totalPoints: number; rank: number }>;
+  return rows;
 }
 
 const DEFAULT_PERSONAL_RANK_LIMIT = 20;
@@ -41,18 +55,27 @@ export async function getPersonalRankLimit(): Promise<number> {
   return Number.isInteger(n) && n > 0 ? n : DEFAULT_PERSONAL_RANK_LIMIT;
 }
 
-export async function getPersonalRankings(eventId: string): Promise<PersonalRanking[]> {
+export async function getPersonalRankings(
+  eventId: string,
+  rowLimit: number,
+): Promise<PersonalRanking[]> {
   const sql = getSql();
-  const limit = await getPersonalRankLimit();
   const rows = (await sql`
-    select sid, sum(points)::int as "totalPoints"
-    from scores
-    where event_id = ${eventId}
-    group by sid
-    order by "totalPoints" desc, sid asc
-    limit ${limit}
-  `) as Array<{ sid: string; totalPoints: number }>;
-  return rows.map((r, i) => ({ rank: i + 1, ...r }));
+    with totals as (
+      select sc.sid,
+        sum(sc.points)::int as total,
+        max(sc.updated_at) as last_scored
+      from scores sc
+      where sc.event_id = ${eventId}
+      group by sc.sid
+    )
+    select sid, total as "totalPoints",
+      (dense_rank() over (order by total desc))::int as rank
+    from totals
+    order by total desc, last_scored desc nulls last, sid asc
+    limit ${rowLimit}
+  `) as Array<{ sid: string; totalPoints: number; rank: number }>;
+  return rows;
 }
 
 export async function getLeaderboard(): Promise<LeaderboardPayload> {
@@ -62,17 +85,21 @@ export async function getLeaderboard(): Promise<LeaderboardPayload> {
       event: null,
       classRankings: [],
       personalRankings: [],
+      personalLimit: DEFAULT_PERSONAL_RANK_LIMIT,
       updatedAt: new Date().toISOString(),
     };
   }
+  const personalLimit = await getPersonalRankLimit();
+  const rowLimit = Math.max(personalLimit, SCOREBOARD_ROW_FLOOR);
   const [classRankings, personalRankings] = await Promise.all([
     getClassRankings(event.id),
-    getPersonalRankings(event.id),
+    getPersonalRankings(event.id, rowLimit),
   ]);
   return {
     event,
     classRankings,
     personalRankings,
+    personalLimit,
     updatedAt: new Date().toISOString(),
   };
 }

@@ -1,5 +1,7 @@
-import Leaderboard from "./leaderboard";
+import Scoreboard from "./leaderboard";
+import { getSession } from "@/lib/session";
 
-export default function Home() {
-  return <Leaderboard />;
+export default async function Home() {
+  const session = await getSession();
+  return <Scoreboard role={session?.role ?? null} />;
 }

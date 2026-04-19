@@ -20,6 +20,7 @@ export type LeaderboardPayload = {
   event: ActiveEvent | null;
   classRankings: ClassRanking[];
   personalRankings: PersonalRanking[];
+  personalLimit: number;
   updatedAt: string;
 };
 

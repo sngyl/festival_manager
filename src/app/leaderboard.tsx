@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import type {
   ClassRanking,
   LeaderboardPayload,
@@ -9,11 +9,13 @@ import type {
 } from "@/lib/types";
 
 type Tab = "class" | "personal" | "me";
+type Role = "teacher" | "admin" | null;
 
 const POLL_MS = 5000;
 const ROTATE_MS = 5000;
+const BIG_SCREEN_SLOTS = 40;
 
-export default function Scoreboard() {
+export default function Scoreboard({ role }: { role: Role }) {
   const [data, setData] = useState<LeaderboardPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -38,13 +40,19 @@ export default function Scoreboard() {
   return (
     <>
       <div className="md:hidden">
-        <PhoneView data={data} error={error} />
+        <PhoneView data={data} error={error} role={role} />
       </div>
       <div className="hidden md:block">
-        <BigScreenView data={data} error={error} />
+        <BigScreenView data={data} error={error} role={role} />
       </div>
     </>
   );
+}
+
+function roleButton(role: Role) {
+  if (role === "teacher") return { label: "선생님", href: "/teacher" };
+  if (role === "admin") return { label: "관리자", href: "/admin" };
+  return { label: "로그인", href: "/login" };
 }
 
 // ---------- Phone ----------
@@ -52,9 +60,11 @@ export default function Scoreboard() {
 function PhoneView({
   data,
   error,
+  role,
 }: {
   data: LeaderboardPayload | null;
   error: string | null;
+  role: Role;
 }) {
   const [tab, setTab] = useState<Tab>("class");
   const updatedLabel = useMemo(() => {
@@ -65,6 +75,12 @@ function PhoneView({
       minute: "2-digit",
       second: "2-digit",
     });
+  }, [data]);
+  const { label: btnLabel, href: btnHref } = roleButton(role);
+
+  const personalSliced = useMemo(() => {
+    if (!data) return [];
+    return data.personalRankings.slice(0, data.personalLimit);
   }, [data]);
 
   return (
@@ -84,10 +100,10 @@ function PhoneView({
               <span className="text-xs text-zinc-500">갱신 {updatedLabel}</span>
             )}
             <a
-              href="/login"
+              href={btnHref}
               className="rounded-md border border-zinc-300 px-2.5 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900"
             >
-              로그인
+              {btnLabel}
             </a>
           </div>
         </div>
@@ -96,7 +112,7 @@ function PhoneView({
       <nav className="flex border-b border-zinc-200 dark:border-zinc-800">
         {(
           [
-            { id: "class", label: "반별 순위" },
+            { id: "class", label: "반 순위" },
             { id: "personal", label: "개인 순위" },
             { id: "me", label: "내 점수" },
           ] as Array<{ id: Tab; label: string }>
@@ -127,27 +143,27 @@ function PhoneView({
         {!data && !error && (
           <p className="py-10 text-center text-zinc-500">불러오는 중…</p>
         )}
-        {data && tab === "class" && <PhoneClassTable data={data} />}
-        {data && tab === "personal" && <PhonePersonalTable data={data} />}
+        {data && tab === "class" && <PhoneClassTable rows={data.classRankings} />}
+        {data && tab === "personal" && <PhonePersonalTable rows={personalSliced} />}
         {tab === "me" && <MyScore />}
       </main>
     </div>
   );
 }
 
-function PhoneClassTable({ data }: { data: LeaderboardPayload }) {
-  if (data.classRankings.length === 0) return <EmptyState />;
+function PhoneClassTable({ rows }: { rows: ClassRanking[] }) {
+  if (rows.length === 0) return <EmptyState />;
   return (
     <ol className="mt-2 divide-y divide-zinc-100 dark:divide-zinc-900">
-      {data.classRankings.map((row) => (
+      {rows.map((row, i) => (
         <li
-          key={`${row.grade}-${row.classNo}`}
+          key={`${row.grade}-${row.classNo}-${i}`}
           className="flex items-center justify-between py-3"
         >
           <div className="flex items-center gap-3">
             <RankBadge rank={row.rank} />
             <span className="text-base font-medium">
-              {row.grade}학년 {row.classNo}반
+              {row.grade}학년 {String(row.classNo).padStart(2, "0")}반
             </span>
           </div>
           <span className="tabular-nums text-base font-semibold">
@@ -159,12 +175,15 @@ function PhoneClassTable({ data }: { data: LeaderboardPayload }) {
   );
 }
 
-function PhonePersonalTable({ data }: { data: LeaderboardPayload }) {
-  if (data.personalRankings.length === 0) return <EmptyState />;
+function PhonePersonalTable({ rows }: { rows: PersonalRanking[] }) {
+  if (rows.length === 0) return <EmptyState />;
   return (
     <ol className="mt-2 divide-y divide-zinc-100 dark:divide-zinc-900">
-      {data.personalRankings.map((row) => (
-        <li key={row.sid} className="flex items-center justify-between py-3">
+      {rows.map((row, i) => (
+        <li
+          key={`${row.sid}-${i}`}
+          className="flex items-center justify-between py-3"
+        >
           <div className="flex items-center gap-3">
             <RankBadge rank={row.rank} />
             <span className="font-mono text-base tabular-nums">{row.sid}</span>
@@ -346,11 +365,14 @@ function EmptyState() {
 function BigScreenView({
   data,
   error,
+  role,
 }: {
   data: LeaderboardPayload | null;
   error: string | null;
+  role: Role;
 }) {
   const [view, setView] = useState<"class" | "personal">("class");
+  const { label: btnLabel, href: btnHref } = roleButton(role);
 
   useEffect(() => {
     const id = setInterval(() => {
@@ -366,15 +388,15 @@ function BigScreenView({
           {data?.event?.name ?? "진행 중인 행사 없음"}
         </h1>
         <a
-          href="/login"
-          className="absolute right-6 top-1/2 -translate-y-1/2 rounded-md border border-zinc-700 px-3 py-1.5 text-sm text-zinc-400 hover:bg-zinc-900"
+          href={btnHref}
+          className="absolute right-6 top-1/2 -translate-y-1/2 rounded-md border border-zinc-700 px-3 py-1.5 text-sm text-zinc-300 hover:bg-zinc-900"
         >
-          로그인
+          {btnLabel}
         </a>
       </section>
 
-      <section className="flex min-h-0 flex-1 flex-col px-6 py-4">
-        <div className="mb-3 flex items-center justify-center gap-3">
+      <section className="flex min-h-0 flex-1 flex-col px-6 py-3">
+        <div className="mb-2 flex items-center justify-center gap-3">
           <span
             className={`rounded-full px-4 py-1 text-lg font-semibold ${
               view === "class"
@@ -395,15 +417,18 @@ function BigScreenView({
           </span>
         </div>
         {error && (
-          <p className="mx-auto mb-2 rounded-md bg-red-950/40 px-3 py-1 text-sm text-red-300">
+          <p className="mx-auto mb-1 rounded-md bg-red-950/40 px-3 py-1 text-sm text-red-300">
             {error}
           </p>
         )}
         <div className="min-h-0 flex-1">
           {view === "class" ? (
-            <BigClassColumns rows={data?.classRankings ?? []} />
+            <BigRankTable rows={data?.classRankings ?? []} kind="class" />
           ) : (
-            <BigPersonalColumns rows={data?.personalRankings ?? []} />
+            <BigRankTable
+              rows={data?.personalRankings ?? []}
+              kind="personal"
+            />
           )}
         </div>
       </section>
@@ -415,77 +440,88 @@ function BigScreenView({
   );
 }
 
-function splitColumns<T>(rows: T[], cols: number): T[][] {
-  const perCol = Math.max(1, Math.ceil(rows.length / cols));
-  return Array.from({ length: cols }, (_, c) =>
-    rows.slice(c * perCol, (c + 1) * perCol),
+type BigRow =
+  | (ClassRanking & { kind: "class" })
+  | (PersonalRanking & { kind: "personal" });
+
+function BigRankTable({
+  rows,
+  kind,
+}: {
+  rows: ClassRanking[] | PersonalRanking[];
+  kind: "class" | "personal";
+}) {
+  // Always render fixed 40 slots arranged as 4 groups × 10 rows.
+  // Layout per row: [rank1][data1][rank2][data2][rank3][data3][rank4][data4]
+  return (
+    <table className="h-full w-full table-fixed border-separate border-spacing-x-2 border-spacing-y-1">
+      <tbody>
+        {Array.from({ length: 10 }, (_, r) => (
+          <tr key={r}>
+            {[0, 1, 2, 3].map((g) => {
+              const slot = g * 10 + r;
+              const item = (rows as Array<ClassRanking | PersonalRanking>)[
+                slot
+              ];
+              const row: BigRow | undefined = item
+                ? kind === "class"
+                  ? { ...(item as ClassRanking), kind: "class" }
+                  : { ...(item as PersonalRanking), kind: "personal" }
+                : undefined;
+              return (
+                <Fragment key={g}>
+                  <td className="w-12 text-right tabular-nums text-2xl font-bold text-amber-400">
+                    {row ? row.rank : ""}
+                  </td>
+                  <td className="rounded-md bg-zinc-900 px-3 py-1.5 align-middle">
+                    {row ? (
+                      <BigCellContent row={row} />
+                    ) : (
+                      <span className="text-zinc-700">—</span>
+                    )}
+                  </td>
+                </Fragment>
+              );
+            })}
+          </tr>
+        ))}
+        {slotAnyEmpty(rows) && rows.length === 0 ? (
+          <tr>
+            <td colSpan={8} className="pt-4 text-center text-zinc-500">
+              아직 입력된 점수가 없습니다.
+            </td>
+          </tr>
+        ) : null}
+      </tbody>
+    </table>
   );
 }
 
-function BigClassColumns({ rows }: { rows: ClassRanking[] }) {
-  if (rows.length === 0) return <BigEmpty />;
-  const cols = splitColumns(rows, 4);
-  return (
-    <div className="grid h-full grid-cols-4 gap-3">
-      {cols.map((col, i) => (
-        <ul key={i} className="flex flex-col gap-1.5">
-          {col.map((r) => (
-            <li
-              key={`${r.grade}-${r.classNo}`}
-              className="flex items-baseline justify-between rounded-md bg-zinc-900 px-3 py-2"
-            >
-              <span className="flex items-baseline gap-2">
-                <span className="w-10 tabular-nums text-right text-2xl font-bold text-amber-400">
-                  {r.rank}
-                </span>
-                <span className="text-xl">
-                  {r.grade}학년 {String(r.classNo).padStart(2, "0")}반
-                </span>
-              </span>
-              <span className="tabular-nums text-2xl font-bold">
-                {r.totalPoints}
-              </span>
-            </li>
-          ))}
-        </ul>
-      ))}
-    </div>
-  );
+function slotAnyEmpty(rows: ClassRanking[] | PersonalRanking[]): boolean {
+  return rows.length < BIG_SCREEN_SLOTS;
 }
 
-function BigPersonalColumns({ rows }: { rows: PersonalRanking[] }) {
-  if (rows.length === 0) return <BigEmpty />;
-  const cols = splitColumns(rows, 4);
+function BigCellContent({ row }: { row: BigRow }) {
+  if (row.kind === "class") {
+    return (
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="truncate text-xl">
+          {row.grade}학년 {String(row.classNo).padStart(2, "0")}반
+        </span>
+        <span className="shrink-0 tabular-nums text-xl font-bold">
+          {row.totalPoints}
+        </span>
+      </div>
+    );
+  }
   return (
-    <div className="grid h-full grid-cols-4 gap-3">
-      {cols.map((col, i) => (
-        <ul key={i} className="flex flex-col gap-1.5">
-          {col.map((r) => (
-            <li
-              key={r.sid}
-              className="flex items-baseline justify-between rounded-md bg-zinc-900 px-3 py-2"
-            >
-              <span className="flex items-baseline gap-2">
-                <span className="w-10 tabular-nums text-right text-2xl font-bold text-amber-400">
-                  {r.rank}
-                </span>
-                <span className="font-mono text-xl">{r.sid}</span>
-              </span>
-              <span className="tabular-nums text-2xl font-bold">
-                {r.totalPoints}
-              </span>
-            </li>
-          ))}
-        </ul>
-      ))}
-    </div>
-  );
-}
-
-function BigEmpty() {
-  return (
-    <div className="flex h-full items-center justify-center text-xl text-zinc-500">
-      아직 입력된 점수가 없습니다.
+    <div className="flex items-baseline justify-between gap-2">
+      <span className="truncate font-mono text-xl tabular-nums">
+        {row.sid}
+      </span>
+      <span className="shrink-0 tabular-nums text-xl font-bold">
+        {row.totalPoints}
+      </span>
     </div>
   );
 }

@@ -32,24 +32,36 @@ export async function GET(_req: Request, ctx: Ctx) {
   const eventName = evRows[0].name;
 
   const classRows = (await sql`
-    select s.grade, s.class_no as "classNo",
-      coalesce(sum(sc.points), 0)::int as "totalPoints"
-    from students s
-    left join scores sc on sc.sid = s.sid and sc.event_id = ${id}
-    group by s.grade, s.class_no
-    having coalesce(sum(sc.points), 0) > 0
-    order by "totalPoints" desc, s.grade asc, s.class_no asc
-  `) as Array<{ grade: number; classNo: number; totalPoints: number }>;
+    with class_totals as (
+      select s.grade, s.class_no,
+        coalesce(sum(sc.points), 0)::int as total,
+        max(sc.updated_at) as last_scored
+      from students s
+      left join scores sc on sc.sid = s.sid and sc.event_id = ${id}
+      group by s.grade, s.class_no
+      having coalesce(sum(sc.points), 0) > 0
+    )
+    select grade, class_no as "classNo", total as "totalPoints",
+      (dense_rank() over (order by total desc))::int as rank
+    from class_totals
+    order by total desc, last_scored desc nulls last, grade asc, class_no asc
+  `) as Array<{ grade: number; classNo: number; totalPoints: number; rank: number }>;
 
   const limit = await getPersonalRankLimit();
   const personalRows = (await sql`
-    select sc.sid, st.grade, st.class_no as "classNo", st.student_no as "studentNo",
-      sum(sc.points)::int as "totalPoints"
-    from scores sc
-    join students st on st.sid = sc.sid
-    where sc.event_id = ${id}
-    group by sc.sid, st.grade, st.class_no, st.student_no
-    order by "totalPoints" desc, sc.sid asc
+    with totals as (
+      select sc.sid, sum(sc.points)::int as total,
+        max(sc.updated_at) as last_scored
+      from scores sc
+      where sc.event_id = ${id}
+      group by sc.sid
+    )
+    select t.sid, st.grade, st.class_no as "classNo", st.student_no as "studentNo",
+      t.total as "totalPoints",
+      (dense_rank() over (order by t.total desc))::int as rank
+    from totals t
+    join students st on st.sid = t.sid
+    order by t.total desc, t.last_scored desc nulls last, t.sid asc
     limit ${limit}
   `) as Array<{
     sid: string;
@@ -57,24 +69,25 @@ export async function GET(_req: Request, ctx: Ctx) {
     classNo: number;
     studentNo: number;
     totalPoints: number;
+    rank: number;
   }>;
 
   const lines: string[] = [];
   lines.push(`[행사] ${eventName}`);
   lines.push("");
-  lines.push("[반별 순위]");
+  lines.push("[반 순위]");
   lines.push(["순위", "학년", "반", "총점"].join(","));
-  classRows.forEach((r, i) => {
+  classRows.forEach((r) => {
     lines.push(
-      [i + 1, r.grade, r.classNo, r.totalPoints].map(csvField).join(","),
+      [r.rank, r.grade, r.classNo, r.totalPoints].map(csvField).join(","),
     );
   });
   lines.push("");
   lines.push(`[개인 순위 (상위 ${limit}명)]`);
   lines.push(["순위", "개인식별번호", "학년", "반", "번호", "총점"].join(","));
-  personalRows.forEach((r, i) => {
+  personalRows.forEach((r) => {
     lines.push(
-      [i + 1, r.sid, r.grade, r.classNo, r.studentNo, r.totalPoints]
+      [r.rank, r.sid, r.grade, r.classNo, r.studentNo, r.totalPoints]
         .map(csvField)
         .join(","),
     );
