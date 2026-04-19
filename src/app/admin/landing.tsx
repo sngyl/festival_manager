@@ -38,6 +38,7 @@ export default function AdminLanding() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [games, setGames] = useState<GameRow[]>([]);
   const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [studentsReloadKey, setStudentsReloadKey] = useState(0);
   const [toast, setToast] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -143,7 +144,10 @@ export default function AdminLanding() {
         events={events}
         selectedId={selectedId}
         onSelect={setSelectedId}
-        onCreated={() => loadEvents()}
+        onCreated={() => {
+          loadEvents();
+          setStudentsReloadKey((k) => k + 1);
+        }}
         onMutated={() => loadEvents()}
         flash={flash}
       />
@@ -163,7 +167,7 @@ export default function AdminLanding() {
 
       <SettingsSection flash={flash} />
 
-      <StudentsSection flash={flash} />
+      <StudentsSection flash={flash} reloadKey={studentsReloadKey} />
 
       {toast && (
         <div
@@ -1172,8 +1176,10 @@ type BulkResult = {
 
 function StudentsSection({
   flash,
+  reloadKey,
 }: {
   flash: (k: "ok" | "err", t: string) => void;
+  reloadKey: number;
 }) {
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -1197,7 +1203,7 @@ function StudentsSection({
 
   useEffect(() => {
     load();
-  }, [load]);
+  }, [load, reloadKey]);
 
   async function addSingle() {
     if (!/^[1-9]\d{4}$/.test(singleSid)) {
