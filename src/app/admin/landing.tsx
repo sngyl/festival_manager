@@ -107,12 +107,20 @@ export default function AdminLanding() {
     <div className="mx-auto flex min-h-dvh w-full max-w-3xl flex-col bg-white px-5 py-6 text-zinc-900 dark:bg-black dark:text-zinc-100">
       <header className="flex items-center justify-between">
         <h1 className="text-xl font-bold">관리자</h1>
-        <button
-          onClick={logout}
-          className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm text-zinc-600 dark:border-zinc-700 dark:text-zinc-400"
-        >
-          로그아웃
-        </button>
+        <div className="flex items-center gap-2">
+          <a
+            href="/"
+            className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm text-zinc-600 dark:border-zinc-700 dark:text-zinc-400"
+          >
+            리더보드
+          </a>
+          <button
+            onClick={logout}
+            className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm text-zinc-600 dark:border-zinc-700 dark:text-zinc-400"
+          >
+            로그아웃
+          </button>
+        </div>
       </header>
 
       <AlertsBanner
@@ -1427,6 +1435,23 @@ function SettingsSection({
 }) {
   const [pw, setPw] = useState("");
   const [saving, setSaving] = useState(false);
+  const [rankLimit, setRankLimit] = useState<string>("");
+  const [rankBusy, setRankBusy] = useState(false);
+
+  const loadRank = useCallback(async () => {
+    try {
+      const { value } = await jsonFetch<{ value: number }>(
+        "/api/settings/personal-rank-limit",
+      );
+      setRankLimit(String(value));
+    } catch (e) {
+      flash("err", e instanceof Error ? e.message : "설정 조회 실패");
+    }
+  }, [flash]);
+
+  useEffect(() => {
+    loadRank();
+  }, [loadRank]);
 
   async function save() {
     if (!/^\d{6}$/.test(pw)) {
@@ -1448,36 +1473,86 @@ function SettingsSection({
     }
   }
 
+  async function saveRank() {
+    const n = parseInt(rankLimit, 10);
+    if (!Number.isInteger(n) || n < 1 || n > 1000) {
+      flash("err", "1~1000 사이 정수");
+      return;
+    }
+    setRankBusy(true);
+    try {
+      await jsonFetch("/api/settings/personal-rank-limit", {
+        method: "POST",
+        body: JSON.stringify({ value: n }),
+      });
+      flash("ok", `개인 순위 표시 ${n}명으로 저장됨`);
+    } catch (e) {
+      flash("err", e instanceof Error ? e.message : "실패");
+    } finally {
+      setRankBusy(false);
+    }
+  }
+
   return (
     <section className="mt-8">
       <h2 className="mb-2 text-sm font-semibold text-zinc-500">설정</h2>
-      <div className="rounded-md border border-zinc-200 p-3 dark:border-zinc-800">
-        <label className="block text-sm font-medium text-zinc-600 dark:text-zinc-400">
-          선생님 공통 비밀번호 (6자리)
-        </label>
-        <div className="mt-2 flex gap-2">
-          <input
-            type="text"
-            inputMode="numeric"
-            pattern="[0-9]*"
-            maxLength={6}
-            autoComplete="off"
-            value={pw}
-            onChange={(e) => setPw(e.target.value.replace(/\D/g, "").slice(0, 6))}
-            placeholder="· · · · · ·"
-            className="flex-1 rounded-md border border-zinc-300 bg-white px-3 py-2 text-center font-mono tracking-[0.4em] outline-none focus:border-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:focus:border-zinc-100"
-          />
-          <button
-            onClick={save}
-            disabled={saving || pw.length !== 6}
-            className="rounded-md bg-zinc-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-40 dark:bg-zinc-100 dark:text-zinc-900"
-          >
-            저장
-          </button>
+      <div className="space-y-3">
+        <div className="rounded-md border border-zinc-200 p-3 dark:border-zinc-800">
+          <label className="block text-sm font-medium text-zinc-600 dark:text-zinc-400">
+            선생님 공통 비밀번호 (6자리)
+          </label>
+          <div className="mt-2 flex gap-2">
+            <input
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              maxLength={6}
+              autoComplete="off"
+              value={pw}
+              onChange={(e) => setPw(e.target.value.replace(/\D/g, "").slice(0, 6))}
+              placeholder="· · · · · ·"
+              className="flex-1 rounded-md border border-zinc-300 bg-white px-3 py-2 text-center font-mono tracking-[0.4em] outline-none focus:border-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:focus:border-zinc-100"
+            />
+            <button
+              onClick={save}
+              disabled={saving || pw.length !== 6}
+              className="rounded-md bg-zinc-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-40 dark:bg-zinc-100 dark:text-zinc-900"
+            >
+              저장
+            </button>
+          </div>
+          <p className="mt-2 text-xs text-zinc-500">
+            저장 즉시 모든 선생님 로그인에 적용됩니다. 기존 로그인 세션은 유지됩니다.
+          </p>
         </div>
-        <p className="mt-2 text-xs text-zinc-500">
-          저장 즉시 모든 선생님 로그인에 적용됩니다. 기존 로그인 세션은 유지됩니다.
-        </p>
+
+        <div className="rounded-md border border-zinc-200 p-3 dark:border-zinc-800">
+          <label className="block text-sm font-medium text-zinc-600 dark:text-zinc-400">
+            개인 순위 표시 인원
+          </label>
+          <div className="mt-2 flex gap-2">
+            <input
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              maxLength={4}
+              value={rankLimit}
+              onChange={(e) => setRankLimit(e.target.value.replace(/\D/g, "").slice(0, 4))}
+              placeholder="예: 20"
+              className="flex-1 rounded-md border border-zinc-300 bg-white px-3 py-2 text-center font-mono outline-none focus:border-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:focus:border-zinc-100"
+            />
+            <button
+              onClick={saveRank}
+              disabled={rankBusy || !rankLimit}
+              className="rounded-md bg-zinc-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-40 dark:bg-zinc-100 dark:text-zinc-900"
+            >
+              저장
+            </button>
+          </div>
+          <p className="mt-2 text-xs text-zinc-500">
+            학생 대시보드 개인 순위 탭에 상위 N명만 표시됩니다. (1~1000)
+          </p>
+        </div>
       </div>
     </section>
   );

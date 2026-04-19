@@ -69,12 +69,20 @@ export default function TeacherScoreForm({ gameName }: { gameName: string }) {
           <div className="text-xs text-zinc-500">선생님 · 게임</div>
           <div className="truncate text-lg font-bold">{gameName}</div>
         </div>
-        <button
-          onClick={logout}
-          className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm text-zinc-600 dark:border-zinc-700 dark:text-zinc-400"
-        >
-          로그아웃
-        </button>
+        <div className="flex items-center gap-2">
+          <a
+            href="/"
+            className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm text-zinc-600 dark:border-zinc-700 dark:text-zinc-400"
+          >
+            리더보드
+          </a>
+          <button
+            onClick={logout}
+            className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm text-zinc-600 dark:border-zinc-700 dark:text-zinc-400"
+          >
+            로그아웃
+          </button>
+        </div>
       </header>
 
       <form onSubmit={submit} className="mt-6 space-y-5">

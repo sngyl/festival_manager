@@ -48,6 +48,12 @@ export default function LoginForm() {
 
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col bg-white px-5 py-8 text-zinc-900 dark:bg-black dark:text-zinc-100">
+      <a
+        href="/"
+        className="mb-4 inline-flex w-fit items-center gap-1 text-sm text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
+      >
+        ← 학생 대시보드로
+      </a>
       <h1 className="text-2xl font-bold">로그인</h1>
       <p className="mt-1 text-sm text-zinc-500">학생은 로그인 없이 순위 확인이 가능합니다.</p>
 

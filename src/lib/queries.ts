@@ -30,15 +30,27 @@ export async function getClassRankings(eventId: string): Promise<ClassRanking[]>
   return rows.map((r, i) => ({ rank: i + 1, ...r }));
 }
 
+const DEFAULT_PERSONAL_RANK_LIMIT = 100;
+
+export async function getPersonalRankLimit(): Promise<number> {
+  const sql = getSql();
+  const rows = (await sql`
+    select value from settings where key = 'personal_rank_limit' limit 1
+  `) as Array<{ value: string }>;
+  const n = rows[0]?.value ? parseInt(rows[0].value, 10) : NaN;
+  return Number.isInteger(n) && n > 0 ? n : DEFAULT_PERSONAL_RANK_LIMIT;
+}
+
 export async function getPersonalRankings(eventId: string): Promise<PersonalRanking[]> {
   const sql = getSql();
+  const limit = await getPersonalRankLimit();
   const rows = (await sql`
     select sid, sum(points)::int as "totalPoints"
     from scores
     where event_id = ${eventId}
     group by sid
     order by "totalPoints" desc, sid asc
-    limit 100
+    limit ${limit}
   `) as Array<{ sid: string; totalPoints: number }>;
   return rows.map((r, i) => ({ rank: i + 1, ...r }));
 }

@@ -75,6 +75,15 @@ export async function POST(req: Request) {
   if (!SID_RE.test(sid)) {
     return NextResponse.json({ error: "개인식별번호 형식이 올바르지 않습니다." }, { status: 400 });
   }
+  const grade = parseInt(sid[0], 10);
+  const classNo = parseInt(sid.slice(1, 3), 10);
+  const studentNo = parseInt(sid.slice(3, 5), 10);
+  if (classNo < 1 || studentNo < 1) {
+    return NextResponse.json(
+      { error: "반/번호는 01~99 범위여야 합니다." },
+      { status: 400 },
+    );
+  }
   if (!Number.isInteger(pointsNum)) {
     return NextResponse.json({ error: "점수는 정수여야 합니다." }, { status: 400 });
   }
@@ -108,10 +117,11 @@ export async function POST(req: Request) {
   }
   const gameId = gameRows[0].id;
 
-  const studentRows = (await sql`select 1 as x from students where sid = ${sid} limit 1`) as Array<{ x: number }>;
-  if (studentRows.length === 0) {
-    return NextResponse.json({ error: "등록되지 않은 개인식별번호입니다." }, { status: 404 });
-  }
+  await sql`
+    insert into students (sid, grade, class_no, student_no)
+    values (${sid}, ${grade}, ${classNo}, ${studentNo})
+    on conflict (sid) do nothing
+  `;
 
   try {
     await sql.begin(async (tx) => {
