@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSql } from "@/lib/db";
 import { requireAdmin } from "@/lib/admin-guard";
+import { getPersonalRankLimit } from "@/lib/queries";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -30,57 +31,60 @@ export async function GET(_req: Request, ctx: Ctx) {
   }
   const eventName = evRows[0].name;
 
-  const rows = (await sql`
-    select st.sid, st.grade, st.class_no, st.student_no,
-      g.name as game_name, sc.points, sc.created_by, sc.updated_at
+  const classRows = (await sql`
+    select s.grade, s.class_no as "classNo",
+      coalesce(sum(sc.points), 0)::int as "totalPoints"
+    from students s
+    left join scores sc on sc.sid = s.sid and sc.event_id = ${id}
+    group by s.grade, s.class_no
+    having coalesce(sum(sc.points), 0) > 0
+    order by "totalPoints" desc, s.grade asc, s.class_no asc
+  `) as Array<{ grade: number; classNo: number; totalPoints: number }>;
+
+  const limit = await getPersonalRankLimit();
+  const personalRows = (await sql`
+    select sc.sid, st.grade, st.class_no as "classNo", st.student_no as "studentNo",
+      sum(sc.points)::int as "totalPoints"
     from scores sc
-    join games g on g.id = sc.game_id
     join students st on st.sid = sc.sid
     where sc.event_id = ${id}
-    order by st.grade asc, st.class_no asc, st.student_no asc, g.name asc
+    group by sc.sid, st.grade, st.class_no, st.student_no
+    order by "totalPoints" desc, sc.sid asc
+    limit ${limit}
   `) as Array<{
     sid: string;
     grade: number;
-    class_no: number;
-    student_no: number;
-    game_name: string;
-    points: number;
-    created_by: string;
-    updated_at: string;
+    classNo: number;
+    studentNo: number;
+    totalPoints: number;
   }>;
 
-  const header = [
-    "sid",
-    "grade",
-    "class_no",
-    "student_no",
-    "game_name",
-    "points",
-    "created_by",
-    "updated_at",
-  ];
-  const lines = [header.join(",")];
-  for (const r of rows) {
+  const lines: string[] = [];
+  lines.push(`[행사] ${eventName}`);
+  lines.push("");
+  lines.push("[반별 순위]");
+  lines.push(["순위", "학년", "반", "총점"].join(","));
+  classRows.forEach((r, i) => {
     lines.push(
-      [
-        r.sid,
-        r.grade,
-        r.class_no,
-        r.student_no,
-        r.game_name,
-        r.points,
-        r.created_by,
-        r.updated_at,
-      ]
+      [i + 1, r.grade, r.classNo, r.totalPoints].map(csvField).join(","),
+    );
+  });
+  lines.push("");
+  lines.push(`[개인 순위 (상위 ${limit}명)]`);
+  lines.push(["순위", "개인식별번호", "학년", "반", "번호", "총점"].join(","));
+  personalRows.forEach((r, i) => {
+    lines.push(
+      [i + 1, r.sid, r.grade, r.classNo, r.studentNo, r.totalPoints]
         .map(csvField)
         .join(","),
     );
-  }
+  });
+
   // BOM for Excel Korean support
   const body = "\ufeff" + lines.join("\r\n") + "\r\n";
 
   const safeName = eventName.replace(/[^\p{L}\p{N}_-]+/gu, "_").slice(0, 60) || "event";
-  const filename = `${safeName}_scores.csv`;
+  const filename = `${safeName}_rankings.csv`;
 
   return new NextResponse(body, {
     status: 200,

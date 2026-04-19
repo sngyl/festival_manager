@@ -30,7 +30,7 @@ export async function getClassRankings(eventId: string): Promise<ClassRanking[]>
   return rows.map((r, i) => ({ rank: i + 1, ...r }));
 }
 
-const DEFAULT_PERSONAL_RANK_LIMIT = 100;
+const DEFAULT_PERSONAL_RANK_LIMIT = 20;
 
 export async function getPersonalRankLimit(): Promise<number> {
   const sql = getSql();

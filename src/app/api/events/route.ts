@@ -44,6 +44,7 @@ export async function POST(req: Request) {
       if (body.activate) {
         await tx`update events set active = false where active = true`;
       }
+      await tx`delete from students`;
       const rows = (await tx`
         insert into events (name, active)
         values (${name}, ${body.activate ? true : false})

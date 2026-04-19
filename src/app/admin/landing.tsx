@@ -250,6 +250,13 @@ function EventsSection({
   async function create() {
     const name = newName.trim();
     if (!name) return;
+    if (
+      !confirm(
+        "새 행사를 생성하면 기존 학생, 점수, 점수 기록이 모두 삭제됩니다. 계속하시겠습니까?",
+      )
+    ) {
+      return;
+    }
     try {
       await jsonFetch("/api/events", {
         method: "POST",
@@ -355,7 +362,7 @@ function EventsSection({
               download
               className="rounded border border-zinc-300 px-2 py-1 text-xs text-zinc-700 dark:border-zinc-700 dark:text-zinc-300"
             >
-              CSV
+              순위저장
             </a>
             <button
               onClick={() => {
