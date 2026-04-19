@@ -12,9 +12,12 @@ type EventRow = {
   score_count: number;
 };
 
+type GameKind = "individual" | "team";
+
 type GameRow = {
   id: string;
   name: string;
+  kind: GameKind;
   created_at: string;
   score_count: number;
   active_session: boolean;
@@ -153,12 +156,26 @@ export default function AdminLanding() {
       />
 
       {selectedId && (
-        <GamesSection
-          eventId={selectedId}
-          games={games}
-          reload={() => loadGames(selectedId)}
-          flash={flash}
-        />
+        <>
+          <GamesSection
+            eventId={selectedId}
+            games={games}
+            kind="individual"
+            title="개인 게임"
+            placeholder="새 게임 이름 (예: 제기차기)"
+            reload={() => loadGames(selectedId)}
+            flash={flash}
+          />
+          <GamesSection
+            eventId={selectedId}
+            games={games}
+            kind="team"
+            title="단체 게임"
+            placeholder="새 단체 게임 이름 (예: 줄다리기)"
+            reload={() => loadGames(selectedId)}
+            flash={flash}
+          />
+        </>
       )}
 
       {selectedId && (
@@ -424,11 +441,17 @@ function EventsSection({
 function GamesSection({
   eventId,
   games,
+  kind,
+  title,
+  placeholder,
   reload,
   flash,
 }: {
   eventId: string;
   games: GameRow[];
+  kind: GameKind;
+  title: string;
+  placeholder: string;
   reload: () => void;
   flash: (k: "ok" | "err", t: string) => void;
 }) {
@@ -436,13 +459,15 @@ function GamesSection({
   const [editing, setEditing] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
 
+  const visible = games.filter((g) => g.kind === kind);
+
   async function add() {
     const name = newName.trim();
     if (!name) return;
     try {
       await jsonFetch("/api/games", {
         method: "POST",
-        body: JSON.stringify({ event_id: eventId, name }),
+        body: JSON.stringify({ event_id: eventId, name, kind }),
       });
       setNewName("");
       flash("ok", "게임 추가됨");
@@ -494,12 +519,12 @@ function GamesSection({
 
   return (
     <section className="mt-6">
-      <h2 className="mb-2 text-sm font-semibold text-zinc-500">게임</h2>
+      <h2 className="mb-2 text-sm font-semibold text-zinc-500">{title}</h2>
       <div className="mb-3 flex gap-2">
         <input
           value={newName}
           onChange={(e) => setNewName(e.target.value)}
-          placeholder="새 게임 이름 (예: 제기차기)"
+          placeholder={placeholder}
           className="flex-1 rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:focus:border-zinc-100"
         />
         <button
@@ -511,10 +536,10 @@ function GamesSection({
       </div>
 
       <ul className="divide-y divide-zinc-200 rounded-md border border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800">
-        {games.length === 0 && (
+        {visible.length === 0 && (
           <li className="p-4 text-center text-sm text-zinc-500">게임이 없습니다.</li>
         )}
-        {games.map((g) => (
+        {visible.map((g) => (
           <li key={g.id} className="flex items-center justify-between gap-2 px-3 py-2">
             <div className="min-w-0 flex-1">
               {editing === g.id ? (
@@ -636,6 +661,8 @@ function ScoresSection({
   const [historyFor, setHistoryFor] = useState<ScoreRow | null>(null);
   const [adding, setAdding] = useState(false);
 
+  const individualGames = games.filter((g) => g.kind === "individual");
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -655,10 +682,10 @@ function ScoresSection({
   }, [load]);
 
   useEffect(() => {
-    if (view === "game" && !gameFilter && games.length > 0) {
-      setGameFilter(games[0].name);
+    if (view === "game" && !gameFilter && individualGames.length > 0) {
+      setGameFilter(individualGames[0].name);
     }
-  }, [view, gameFilter, games]);
+  }, [view, gameFilter, individualGames]);
 
   async function savePoints(row: ScoreRow, nextPoints: number) {
     if (row.points === nextPoints) return;
@@ -731,8 +758,8 @@ function ScoresSection({
             onChange={(e) => setGameFilter(e.target.value)}
             className="mb-2 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
           >
-            {games.length === 0 && <option value="">게임 없음</option>}
-            {games.map((g) => (
+            {individualGames.length === 0 && <option value="">게임 없음</option>}
+            {individualGames.map((g) => (
               <option key={g.id} value={g.name}>
                 {g.name}
               </option>
@@ -843,7 +870,7 @@ function ScoresSection({
 
       {adding && (
         <ScoreAddModal
-          games={games}
+          games={individualGames}
           onClose={() => setAdding(false)}
           onSaved={() => {
             setAdding(false);

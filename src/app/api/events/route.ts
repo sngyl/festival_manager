@@ -45,6 +45,10 @@ export async function POST(req: Request) {
         await tx`update events set active = false where active = true`;
       }
       await tx`delete from students`;
+      await tx`
+        insert into settings (key, value) values ('personal_rank_limit', '40')
+        on conflict (key) do update set value = excluded.value
+      `;
       const rows = (await tx`
         insert into events (name, active)
         values (${name}, ${body.activate ? true : false})

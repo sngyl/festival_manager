@@ -3,24 +3,39 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
-type Recent = { sid: string; points: number; at: string };
+type Recent = { label: string; points: number; at: string };
+type Kind = "individual" | "team";
 
-export default function TeacherScoreForm({ gameName }: { gameName: string }) {
+export default function TeacherScoreForm({
+  gameName,
+  kind,
+}: {
+  gameName: string;
+  kind: Kind;
+}) {
   const router = useRouter();
   const [sid, setSid] = useState("");
+  const [classKey, setClassKey] = useState("");
   const [points, setPoints] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [recent, setRecent] = useState<Recent[]>([]);
-  const sidRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
 
-    if (!/^[1-9]\d{4}$/.test(sid)) {
-      setError("개인식별번호 5자리를 입력하세요.");
-      return;
+    if (kind === "individual") {
+      if (!/^[1-9]\d{4}$/.test(sid)) {
+        setError("학생번호 5자리를 입력하세요.");
+        return;
+      }
+    } else {
+      if (!/^[1-9]\d{2}$/.test(classKey)) {
+        setError("반번호 3자리를 입력하세요.");
+        return;
+      }
     }
     if (!/^-?\d+$/.test(points)) {
       setError("점수(정수)를 입력하세요.");
@@ -29,22 +44,38 @@ export default function TeacherScoreForm({ gameName }: { gameName: string }) {
 
     setSaving(true);
     try {
+      const payload =
+        kind === "individual"
+          ? { sid, points: parseInt(points, 10) }
+          : { classKey, points: parseInt(points, 10) };
       const res = await fetch("/api/scores", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sid, points: parseInt(points, 10) }),
+        body: JSON.stringify(payload),
       });
       const json = await res.json();
       if (!res.ok) {
         setError(json.error ?? "저장 실패");
         return;
       }
+      const label =
+        kind === "individual"
+          ? sid
+          : `${classKey[0]}학년 ${classKey.slice(1, 3)}반`;
       setRecent((r) =>
-        [{ sid, points: parseInt(points, 10), at: new Date().toLocaleTimeString("ko-KR") }, ...r].slice(0, 5),
+        [
+          {
+            label,
+            points: parseInt(points, 10),
+            at: new Date().toLocaleTimeString("ko-KR"),
+          },
+          ...r,
+        ].slice(0, 5),
       );
       setSid("");
+      setClassKey("");
       setPoints("");
-      sidRef.current?.focus();
+      inputRef.current?.focus();
     } catch (err) {
       setError(err instanceof Error ? err.message : "네트워크 오류");
     } finally {
@@ -62,7 +93,9 @@ export default function TeacherScoreForm({ gameName }: { gameName: string }) {
     <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col bg-white px-5 pb-10 text-zinc-900 dark:bg-black dark:text-zinc-100">
       <header className="sticky top-0 z-10 -mx-5 flex items-center justify-between border-b border-zinc-200 bg-white/90 px-5 py-3 backdrop-blur dark:border-zinc-800 dark:bg-black/90">
         <div>
-          <div className="text-xs text-zinc-500">선생님 · 게임</div>
+          <div className="text-xs text-zinc-500">
+            선생님 · {kind === "team" ? "단체 게임" : "개인 게임"}
+          </div>
           <div className="truncate text-lg font-bold">{gameName}</div>
         </div>
         <div className="flex items-center gap-2">
@@ -82,47 +115,91 @@ export default function TeacherScoreForm({ gameName }: { gameName: string }) {
       </header>
 
       <form onSubmit={submit} className="mt-6 space-y-5">
-        <label className="block">
-          <span className="text-sm font-medium text-zinc-600 dark:text-zinc-400">
-            학생번호 (5자리)
-          </span>
-          <div className="relative mt-1">
-            <input
-              ref={sidRef}
-              type="text"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              maxLength={5}
-              autoFocus
-              autoComplete="off"
-              value={sid}
-              onChange={(e) => setSid(e.target.value.replace(/\D/g, "").slice(0, 5))}
-              className="w-full rounded-md border border-zinc-300 bg-white px-3 py-4 text-center font-mono text-3xl tracking-[0.5em] text-transparent caret-transparent outline-none placeholder:text-transparent focus:border-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:focus:border-zinc-100"
-            />
-            <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-3 font-mono text-3xl text-zinc-900 dark:text-zinc-100">
-              {sid.length === 0 ? (
-                <span className="tracking-[0.5em] text-zinc-400">G C C N N</span>
-              ) : (
-                <span className="flex items-baseline">
-                  <span className="tabular-nums">{sid[0]}</span>
-                  <span className="ml-1 mr-2 text-xl text-zinc-500">학년</span>
-                  {sid.length >= 2 && (
-                    <>
-                      <span className="tabular-nums">{sid.slice(1, 3)}</span>
-                      <span className="ml-1 mr-2 text-xl text-zinc-500">반</span>
-                    </>
-                  )}
-                  {sid.length >= 4 && (
-                    <>
-                      <span className="tabular-nums">{sid.slice(3, 5)}</span>
-                      <span className="ml-1 text-xl text-zinc-500">번</span>
-                    </>
-                  )}
-                </span>
-              )}
+        {kind === "individual" ? (
+          <label className="block">
+            <span className="text-sm font-medium text-zinc-600 dark:text-zinc-400">
+              학생번호 (5자리)
+            </span>
+            <div className="relative mt-1">
+              <input
+                ref={inputRef}
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={5}
+                autoFocus
+                autoComplete="off"
+                value={sid}
+                onChange={(e) =>
+                  setSid(e.target.value.replace(/\D/g, "").slice(0, 5))
+                }
+                className="w-full rounded-md border border-zinc-300 bg-white px-3 py-4 text-center font-mono text-3xl tracking-[0.5em] text-transparent caret-transparent outline-none placeholder:text-transparent focus:border-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:focus:border-zinc-100"
+              />
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-3 font-mono text-3xl text-zinc-900 dark:text-zinc-100">
+                {sid.length === 0 ? (
+                  <span className="tracking-[0.5em] text-zinc-400">G C C N N</span>
+                ) : (
+                  <span className="flex items-baseline">
+                    <span className="tabular-nums">{sid[0]}</span>
+                    <span className="ml-1 mr-2 text-xl text-zinc-500">학년</span>
+                    {sid.length >= 2 && (
+                      <>
+                        <span className="tabular-nums">{sid.slice(1, 3)}</span>
+                        <span className="ml-1 mr-2 text-xl text-zinc-500">반</span>
+                      </>
+                    )}
+                    {sid.length >= 4 && (
+                      <>
+                        <span className="tabular-nums">{sid.slice(3, 5)}</span>
+                        <span className="ml-1 text-xl text-zinc-500">번</span>
+                      </>
+                    )}
+                  </span>
+                )}
+              </div>
             </div>
-          </div>
-        </label>
+          </label>
+        ) : (
+          <label className="block">
+            <span className="text-sm font-medium text-zinc-600 dark:text-zinc-400">
+              반번호 (3자리)
+            </span>
+            <div className="relative mt-1">
+              <input
+                ref={inputRef}
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={3}
+                autoFocus
+                autoComplete="off"
+                value={classKey}
+                onChange={(e) =>
+                  setClassKey(e.target.value.replace(/\D/g, "").slice(0, 3))
+                }
+                className="w-full rounded-md border border-zinc-300 bg-white px-3 py-4 text-center font-mono text-3xl tracking-[0.5em] text-transparent caret-transparent outline-none placeholder:text-transparent focus:border-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:focus:border-zinc-100"
+              />
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-3 font-mono text-3xl text-zinc-900 dark:text-zinc-100">
+                {classKey.length === 0 ? (
+                  <span className="tracking-[0.5em] text-zinc-400">G C C</span>
+                ) : (
+                  <span className="flex items-baseline">
+                    <span className="tabular-nums">{classKey[0]}</span>
+                    <span className="ml-1 mr-2 text-xl text-zinc-500">학년</span>
+                    {classKey.length >= 2 && (
+                      <>
+                        <span className="tabular-nums">
+                          {classKey.slice(1, 3)}
+                        </span>
+                        <span className="ml-1 text-xl text-zinc-500">반</span>
+                      </>
+                    )}
+                  </span>
+                )}
+              </div>
+            </div>
+          </label>
+        )}
 
         <label className="block">
           <span className="text-sm font-medium text-zinc-600 dark:text-zinc-400">점수</span>
@@ -159,7 +236,7 @@ export default function TeacherScoreForm({ gameName }: { gameName: string }) {
           <ul className="divide-y divide-zinc-100 dark:divide-zinc-900">
             {recent.map((r, i) => (
               <li key={i} className="flex items-center justify-between py-2 text-sm">
-                <span className="font-mono">{r.sid}</span>
+                <span className="font-mono">{r.label}</span>
                 <span className="tabular-nums font-semibold">{r.points}</span>
                 <span className="text-xs text-zinc-500">{r.at}</span>
               </li>

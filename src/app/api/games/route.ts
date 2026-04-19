@@ -15,8 +15,11 @@ export async function GET(req: Request) {
 
   const sql = getSql();
   const rows = (await sql`
-    select g.id, g.name, g.created_at,
-      (select count(*)::int from scores s where s.game_id = g.id) as score_count,
+    select g.id, g.name, g.kind, g.created_at,
+      case when g.kind = 'team'
+        then (select count(*)::int from class_scores cs where cs.game_id = g.id)
+        else (select count(*)::int from scores s where s.game_id = g.id)
+      end as score_count,
       (select session_token is not null from teacher_sessions ts where ts.game_name = g.name) as active_session
     from games g
     where g.event_id = ${eventId}
@@ -24,6 +27,7 @@ export async function GET(req: Request) {
   `) as Array<{
     id: string;
     name: string;
+    kind: "individual" | "team";
     created_at: string;
     score_count: number;
     active_session: boolean | null;
@@ -38,7 +42,7 @@ export async function POST(req: Request) {
   const guard = await requireAdmin();
   if (!guard.ok) return guard.response;
 
-  let body: { event_id?: string; name?: string };
+  let body: { event_id?: string; name?: string; kind?: string };
   try {
     body = (await req.json()) as typeof body;
   } catch {
@@ -47,6 +51,7 @@ export async function POST(req: Request) {
 
   const eventId = (body.event_id ?? "").trim();
   const name = (body.name ?? "").trim();
+  const kind = body.kind === "team" ? "team" : "individual";
   if (!UUID_RE.test(eventId))
     return NextResponse.json({ error: "event_id 필요" }, { status: 400 });
   if (!name) return NextResponse.json({ error: "게임 이름이 필요합니다." }, { status: 400 });
@@ -56,9 +61,9 @@ export async function POST(req: Request) {
   const sql = getSql();
   try {
     const rows = (await sql`
-      insert into games (event_id, name) values (${eventId}, ${name})
-      returning id, name, created_at
-    `) as Array<{ id: string; name: string; created_at: string }>;
+      insert into games (event_id, name, kind) values (${eventId}, ${name}, ${kind})
+      returning id, name, kind, created_at
+    `) as Array<{ id: string; name: string; kind: string; created_at: string }>;
     return NextResponse.json({ game: rows[0] });
   } catch (err) {
     const message = err instanceof Error ? err.message : "unknown";

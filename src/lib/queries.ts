@@ -27,14 +27,34 @@ export async function getActiveEvent(): Promise<ActiveEvent | null> {
 export async function getClassRankings(eventId: string): Promise<ClassRanking[]> {
   const sql = getSql();
   const rows = (await sql`
-    with class_totals as (
+    with individual as (
       select s.grade, s.class_no,
         coalesce(sum(sc.points), 0)::int as total,
         max(sc.updated_at) as last_scored
       from students s
       left join scores sc on sc.sid = s.sid and sc.event_id = ${eventId}
       group by s.grade, s.class_no
-      having coalesce(sum(sc.points), 0) > 0
+    ),
+    team as (
+      select grade, class_no,
+        coalesce(sum(points), 0)::int as total,
+        max(updated_at) as last_scored
+      from class_scores
+      where event_id = ${eventId}
+      group by grade, class_no
+    ),
+    combined as (
+      select grade, class_no, total, last_scored from individual
+      union all
+      select grade, class_no, total, last_scored from team
+    ),
+    class_totals as (
+      select grade, class_no,
+        sum(total)::int as total,
+        max(last_scored) as last_scored
+      from combined
+      group by grade, class_no
+      having sum(total) > 0
     )
     select grade, class_no as "classNo", total as "totalPoints",
       (dense_rank() over (order by total desc))::int as rank
@@ -44,7 +64,7 @@ export async function getClassRankings(eventId: string): Promise<ClassRanking[]>
   return rows;
 }
 
-const DEFAULT_PERSONAL_RANK_LIMIT = 20;
+const DEFAULT_PERSONAL_RANK_LIMIT = 40;
 
 export async function getPersonalRankLimit(): Promise<number> {
   const sql = getSql();
@@ -146,11 +166,27 @@ export async function getStudentDetail(sid: string): Promise<StudentDetail | nul
   `) as Array<{ rank: number }>;
 
   const classRankRows = (await sql`
-    with class_totals as (
+    with individual as (
       select s.grade, s.class_no, coalesce(sum(sc.points), 0)::int as total
       from students s
       left join scores sc on sc.sid = s.sid and sc.event_id = ${event.id}
       group by s.grade, s.class_no
+    ),
+    team as (
+      select grade, class_no, coalesce(sum(points), 0)::int as total
+      from class_scores
+      where event_id = ${event.id}
+      group by grade, class_no
+    ),
+    combined as (
+      select grade, class_no, total from individual
+      union all
+      select grade, class_no, total from team
+    ),
+    class_totals as (
+      select grade, class_no, sum(total)::int as total
+      from combined
+      group by grade, class_no
     )
     select rank from (
       select grade, class_no, dense_rank() over (order by total desc)::int as rank from class_totals

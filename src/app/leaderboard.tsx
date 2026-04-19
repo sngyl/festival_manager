@@ -13,7 +13,6 @@ type Role = "teacher" | "admin" | null;
 
 const POLL_MS = 5000;
 const ROTATE_MS = 5000;
-const BIG_SCREEN_SLOTS = 40;
 
 export default function Scoreboard({ role }: { role: Role }) {
   const [data, setData] = useState<LeaderboardPayload | null>(null);
@@ -452,17 +451,30 @@ function BigRankTable({
   kind: "class" | "personal";
 }) {
   // Always render fixed 40 slots arranged as 4 groups × 10 rows.
-  // Layout per row: [rank1][data1][rank2][data2][rank3][data3][rank4][data4]
+  // Each group contributes 3 columns: [rank][참가자][총점]. A header row labels them.
   return (
     <table className="h-full w-full table-fixed border-separate border-spacing-x-2 border-spacing-y-1">
+      <thead>
+        <tr className="text-sm font-semibold text-zinc-400">
+          {[0, 1, 2, 3].map((g) => (
+            <Fragment key={g}>
+              <th className="w-12 text-right">순위</th>
+              <th className="text-left">참가자</th>
+              <th className="w-20 text-right">총점</th>
+            </Fragment>
+          ))}
+        </tr>
+      </thead>
       <tbody>
         {Array.from({ length: 10 }, (_, r) => (
           <tr key={r}>
             {[0, 1, 2, 3].map((g) => {
               const slot = g * 10 + r;
-              const item = (rows as Array<ClassRanking | PersonalRanking>)[
-                slot
-              ];
+              const item = (rows as Array<ClassRanking | PersonalRanking>)[slot];
+              const prev = slot > 0
+                ? (rows as Array<ClassRanking | PersonalRanking>)[slot - 1]
+                : undefined;
+              const hideRank = !!(item && prev && item.rank === prev.rank);
               const row: BigRow | undefined = item
                 ? kind === "class"
                   ? { ...(item as ClassRanking), kind: "class" }
@@ -471,23 +483,26 @@ function BigRankTable({
               return (
                 <Fragment key={g}>
                   <td className="w-12 text-right tabular-nums text-2xl font-bold text-amber-400">
-                    {row ? row.rank : ""}
+                    {row && !hideRank ? row.rank : ""}
                   </td>
-                  <td className="rounded-md bg-zinc-900 px-3 py-1.5 align-middle">
+                  <td className="rounded-l-md bg-zinc-900 px-3 py-1.5 align-middle">
                     {row ? (
-                      <BigCellContent row={row} />
+                      <BigCellName row={row} />
                     ) : (
                       <span className="text-zinc-700">—</span>
                     )}
+                  </td>
+                  <td className="w-20 rounded-r-md bg-zinc-900 pr-3 py-1.5 text-right align-middle tabular-nums text-xl font-bold">
+                    {row ? row.totalPoints : ""}
                   </td>
                 </Fragment>
               );
             })}
           </tr>
         ))}
-        {slotAnyEmpty(rows) && rows.length === 0 ? (
+        {rows.length === 0 ? (
           <tr>
-            <td colSpan={8} className="pt-4 text-center text-zinc-500">
+            <td colSpan={12} className="pt-4 text-center text-zinc-500">
               아직 입력된 점수가 없습니다.
             </td>
           </tr>
@@ -497,32 +512,16 @@ function BigRankTable({
   );
 }
 
-function slotAnyEmpty(rows: ClassRanking[] | PersonalRanking[]): boolean {
-  return rows.length < BIG_SCREEN_SLOTS;
-}
-
-function BigCellContent({ row }: { row: BigRow }) {
+function BigCellName({ row }: { row: BigRow }) {
   if (row.kind === "class") {
     return (
-      <div className="flex items-baseline justify-between gap-2">
-        <span className="truncate text-xl">
-          {row.grade}학년 {String(row.classNo).padStart(2, "0")}반
-        </span>
-        <span className="shrink-0 tabular-nums text-xl font-bold">
-          {row.totalPoints}
-        </span>
-      </div>
+      <span className="truncate text-xl">
+        {row.grade}학년 {String(row.classNo).padStart(2, "0")}반
+      </span>
     );
   }
   return (
-    <div className="flex items-baseline justify-between gap-2">
-      <span className="truncate font-mono text-xl tabular-nums">
-        {row.sid}
-      </span>
-      <span className="shrink-0 tabular-nums text-xl font-bold">
-        {row.totalPoints}
-      </span>
-    </div>
+    <span className="truncate font-mono text-xl tabular-nums">{row.sid}</span>
   );
 }
 

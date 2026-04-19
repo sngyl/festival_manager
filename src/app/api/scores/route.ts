@@ -6,6 +6,7 @@ import { getActiveEvent } from "@/lib/queries";
 import { requireAdmin } from "@/lib/admin-guard";
 
 const SID_RE = /^[1-9]\d{4}$/;
+const CLASS_KEY_RE = /^[1-9]\d{2}$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export async function GET(req: Request) {
@@ -57,33 +58,24 @@ export async function POST(req: Request) {
     );
   }
 
-  let body: { sid?: string; points?: unknown; gameName?: string };
+  let body: {
+    sid?: string;
+    classKey?: string;
+    points?: unknown;
+    gameName?: string;
+  };
   try {
     body = (await req.json()) as typeof body;
   } catch {
     return NextResponse.json({ error: "잘못된 요청" }, { status: 400 });
   }
 
-  const sid = (body.sid ?? "").trim();
   const pointsNum =
     typeof body.points === "number"
       ? body.points
       : typeof body.points === "string" && /^-?\d+$/.test(body.points)
         ? parseInt(body.points, 10)
         : NaN;
-
-  if (!SID_RE.test(sid)) {
-    return NextResponse.json({ error: "개인식별번호 형식이 올바르지 않습니다." }, { status: 400 });
-  }
-  const grade = parseInt(sid[0], 10);
-  const classNo = parseInt(sid.slice(1, 3), 10);
-  const studentNo = parseInt(sid.slice(3, 5), 10);
-  if (classNo < 1 || studentNo < 1) {
-    return NextResponse.json(
-      { error: "반/번호는 01~99 범위여야 합니다." },
-      { status: 400 },
-    );
-  }
   if (!Number.isInteger(pointsNum)) {
     return NextResponse.json({ error: "점수는 정수여야 합니다." }, { status: 400 });
   }
@@ -108,14 +100,85 @@ export async function POST(req: Request) {
   }
 
   const sql = getSql();
-
   const gameRows = (await sql`
-    select id from games where event_id = ${event.id} and name = ${gameName} limit 1
-  `) as Array<{ id: string }>;
+    select id, kind from games where event_id = ${event.id} and name = ${gameName} limit 1
+  `) as Array<{ id: string; kind: "individual" | "team" }>;
   if (gameRows.length === 0) {
     return NextResponse.json({ error: "해당 게임을 찾을 수 없습니다." }, { status: 404 });
   }
-  const gameId = gameRows[0].id;
+  const { id: gameId, kind } = gameRows[0];
+
+  if (kind === "team") {
+    const classKey = (body.classKey ?? "").trim();
+    if (!CLASS_KEY_RE.test(classKey)) {
+      return NextResponse.json(
+        { error: "반번호 형식이 올바르지 않습니다." },
+        { status: 400 },
+      );
+    }
+    const grade = parseInt(classKey[0], 10);
+    const classNo = parseInt(classKey.slice(1, 3), 10);
+    if (classNo < 1) {
+      return NextResponse.json({ error: "반은 01~99 범위여야 합니다." }, { status: 400 });
+    }
+
+    try {
+      await sql.begin(async (tx) => {
+        const existing = (await tx`
+          select id, points from class_scores
+          where event_id = ${event.id} and game_id = ${gameId}
+            and grade = ${grade} and class_no = ${classNo}
+          limit 1
+        `) as Array<{ id: string; points: number }>;
+
+        if (existing.length === 0) {
+          const inserted = (await tx`
+            insert into class_scores (event_id, game_id, grade, class_no, points, created_by)
+            values (${event.id}, ${gameId}, ${grade}, ${classNo}, ${pointsNum}, ${changedBy})
+            returning id
+          `) as Array<{ id: string }>;
+          await tx`
+            insert into class_score_logs
+              (class_score_id, event_id, game_id, grade, class_no, old_points, new_points, changed_by)
+            values
+              (${inserted[0].id}, ${event.id}, ${gameId}, ${grade}, ${classNo}, null, ${pointsNum}, ${changedBy})
+          `;
+        } else if (existing[0].points !== pointsNum) {
+          await tx`
+            update class_scores
+            set points = ${pointsNum}, updated_at = now(), created_by = ${changedBy}
+            where id = ${existing[0].id}
+          `;
+          await tx`
+            insert into class_score_logs
+              (class_score_id, event_id, game_id, grade, class_no, old_points, new_points, changed_by)
+            values
+              (${existing[0].id}, ${event.id}, ${gameId}, ${grade}, ${classNo}, ${existing[0].points}, ${pointsNum}, ${changedBy})
+          `;
+        }
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "unknown";
+      return NextResponse.json({ error: `저장 실패: ${message}` }, { status: 500 });
+    }
+
+    return NextResponse.json({ ok: true, classKey, points: pointsNum, gameName });
+  }
+
+  // individual
+  const sid = (body.sid ?? "").trim();
+  if (!SID_RE.test(sid)) {
+    return NextResponse.json({ error: "개인식별번호 형식이 올바르지 않습니다." }, { status: 400 });
+  }
+  const grade = parseInt(sid[0], 10);
+  const classNo = parseInt(sid.slice(1, 3), 10);
+  const studentNo = parseInt(sid.slice(3, 5), 10);
+  if (classNo < 1 || studentNo < 1) {
+    return NextResponse.json(
+      { error: "반/번호는 01~99 범위여야 합니다." },
+      { status: 400 },
+    );
+  }
 
   await sql`
     insert into students (sid, grade, class_no, student_no)
