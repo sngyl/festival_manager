@@ -22,7 +22,7 @@ export async function getActiveEvent(): Promise<ActiveEvent | null> {
 }
 
 // Ranking rules:
-//   - dense_rank by total descending (ties share a rank; next rank is +1 not +N)
+//   - standard rank by total descending (ties share a rank; next rank skips, e.g. 1,1,1,4)
 //   - within a tied group, order by most-recent score first (last_scored desc)
 export async function getClassRankings(eventId: string): Promise<ClassRanking[]> {
   const sql = getSql();
@@ -57,7 +57,7 @@ export async function getClassRankings(eventId: string): Promise<ClassRanking[]>
       having sum(total) > 0
     )
     select grade, class_no as "classNo", total as "totalPoints",
-      (dense_rank() over (order by total desc))::int as rank
+      (rank() over (order by total desc))::int as rank
     from class_totals
     order by total desc, last_scored desc nulls last, grade asc, class_no asc
   `) as Array<{ grade: number; classNo: number; totalPoints: number; rank: number }>;
@@ -90,7 +90,7 @@ export async function getPersonalRankings(
       group by sc.sid
     )
     select sid, total as "totalPoints",
-      (dense_rank() over (order by total desc))::int as rank
+      (rank() over (order by total desc))::int as rank
     from totals
     order by total desc, last_scored desc nulls last, sid asc
     limit ${rowLimit}
@@ -161,7 +161,7 @@ export async function getStudentDetail(sid: string): Promise<StudentDetail | nul
       group by sid
     )
     select rank from (
-      select sid, dense_rank() over (order by total desc)::int as rank from totals
+      select sid, rank() over (order by total desc)::int as rank from totals
     ) r where sid = ${sid}
   `) as Array<{ rank: number }>;
 
@@ -189,7 +189,7 @@ export async function getStudentDetail(sid: string): Promise<StudentDetail | nul
       group by grade, class_no
     )
     select rank from (
-      select grade, class_no, dense_rank() over (order by total desc)::int as rank from class_totals
+      select grade, class_no, rank() over (order by total desc)::int as rank from class_totals
     ) r where grade = ${student.grade} and class_no = ${student.classNo}
   `) as Array<{ rank: number }>;
 
